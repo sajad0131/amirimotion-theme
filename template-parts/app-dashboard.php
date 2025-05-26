@@ -240,24 +240,24 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
         <div class="info-card">
             <h3>Unpaid Invoices</h3>
             <?php
-            $unpaid_invoices_count = 0;
-            $invoices = get_posts([
-              'post_type'=>'invoice',
-              'author'   => $current_user->ID,
-              'meta_query' => [
-                  [
-                      'key' => 'paid',
-                      'value' => '0',
-                      'compare' => '='
-                  ]
-              ],
+            $unpaid_invoices_args = array(
+              'post_type'      => 'invoice',
+              'author'         => $current_user->ID,
               'posts_per_page' => -1,
-              'fields' => 'ids'
-            ]);
-            $unpaid_invoices_count = count($invoices);
-            ?>
-            <span class="stat"><?php echo esc_html($unpaid_invoices_count); ?></span>
-            <p>You have <?php echo esc_html($unpaid_invoices_count); ?> pending payments.</p>
+              'meta_query'     => array(
+                  array(
+                      'key'     => '_paid',
+                      'value'   => '0', // Assuming '0' means unpaid
+                      'compare' => '=',
+                  ),
+              ),
+              'fields' => 'ids', // Only get post IDs to count them
+          );
+          $unpaid_invoices = get_posts($unpaid_invoices_args);
+          $unpaid_count = count($unpaid_invoices);
+        ?>
+        <span class="stat"><?php echo esc_html($unpaid_count); ?></span>
+        <p>You have <?php echo $unpaid_count; ?> unpaid invoice(s). <a href="<?php echo add_query_arg('screen', 'payments', get_permalink()); ?>">View Invoices</a></p>
         </div>
     </div>
 
@@ -670,47 +670,71 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
 
 
     <?php elseif ($screen == 'payments') : ?>
-      <h2>Payments</h2>
-      <?php
-      $invoices = get_posts([
-        'post_type' => 'invoice',
-        'author'   => $current_user->ID,
-        'orderby'  => 'date',
-        'order'    => 'DESC',
-      ]);
-      if ($invoices) {
-        echo '<ul>';
-        foreach ($invoices as $inv) {
-          $amt  = get_post_meta($inv->ID, 'amount', true);
-          $paid = get_post_meta($inv->ID, 'paid', true);
-          echo '<li>Invoice #' . $inv->ID
-            . ' – $' . number_format($amt, 2)
-            . ' – ' . ($paid ? 'Paid' : 'Unpaid');
-          if (! $paid) :
-      ?>
-            <form method="post" style="display:inline">
-              <?php wp_nonce_field("pay_invoice_{$inv->ID}"); ?>
-              <button name="pay_invoice" value="<?php echo $inv->ID; ?>">Pay Now</button>
-            </form>
-      <?php
-          endif;
-          echo '</li>';
-        }
-        echo '</ul>';
-      } else {
-        echo '<p>No invoices yet.</p>';
-      }
+      <h2><?php _e('Invoices & Payments', 'sina-amiri'); ?></h2>
+    <?php
+    $invoices = get_posts([
+      'post_type' => 'invoice',
+      'author'    => $current_user->ID,
+      'orderby'   => 'date',
+      'order'     => 'DESC',
+      'posts_per_page' => -1,
+    ]);
 
-      // handle payment
-      if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['pay_invoice'])) {
-        $iid = intval($_POST['pay_invoice']);
-        if (wp_verify_nonce($_POST["_wpnonce"], "pay_invoice_{$iid}")) {
-          update_post_meta($iid, 'paid', 1);
-          // optionally credit project or send email…
-          echo '<p>Thank you — invoice paid.</p>';
+    if( $invoices ) {
+      echo '<ul>';
+      foreach($invoices as $inv){
+        $invoice_id    = $inv->ID;
+        $project_id    = get_post_meta($invoice_id, '_project_id', true);
+        $project_title = $project_id ? get_the_title($project_id) : __('General Invoice', 'sina-amiri');
+        $amount        = get_post_meta($invoice_id, '_amount', true);
+        $is_paid       = get_post_meta($invoice_id, '_paid', true);
+        $invoice_date  = get_post_meta($invoice_id, '_invoice_date', true);
+        $invoice_content = $inv->post_content; // Get the invoice description/content
+
+        echo '<li>';
+        echo '<strong>'. esc_html($inv->post_title) . '</strong>';
+        if ($project_id) {
+            echo ' ('.__('for project:', 'sina-amiri').' ' . esc_html($project_title) . ')';
         }
+        echo '<br>';
+        echo __('Invoice ID:', 'sina-amiri').' #'. esc_html($invoice_id) .'<br>';
+        echo __('Amount:', 'sina-amiri').' $'. number_format(floatval($amount), 2) .'<br>';
+        echo __('Date:', 'sina-amiri').' '. ($invoice_date ? date_i18n(get_option('date_format'), strtotime($invoice_date)) : __('N/A', 'sina-amiri')) .'<br>';
+        echo __('Status:', 'sina-amiri').' '. ($is_paid ? '<span style="color:green;">'.__('Paid', 'sina-amiri').'</span>' : '<span style="color:red;">'.__('Unpaid', 'sina-amiri').'</span>');
+
+        if( ! $is_paid ) {
+          ?>
+          <form method="post" style="display:inline; margin-left: 10px;">
+            <?php wp_nonce_field("pay_invoice_{$invoice_id}"); ?>
+            <input type="hidden" name="invoice_to_pay_id" value="<?php echo esc_attr($invoice_id); ?>">
+            <button type="submit" name="pay_invoice_button" value="pay"><?php _e('Pay Now', 'sina-amiri'); ?></button>
+          </form>
+          <?php
+        }
+        // Display the invoice description
+        if (!empty($invoice_content)) {
+            echo '<div class="invoice-description">' . wpautop(wp_kses_post($invoice_content)) . '</div>';
+        }
+        echo '</li><hr>';
       }
-      ?>
+      echo '</ul>';
+    } else {
+      echo '<p>'.__('You have no invoices at the moment.', 'sina-amiri').'</p>';
+    }
+
+    // Handle payment
+    if( $_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['pay_invoice_button']) && isset($_POST['invoice_to_pay_id']) ){
+      $invoice_to_pay_id = intval($_POST['invoice_to_pay_id']);
+      if( isset($_POST['_wpnonce']) && wp_verify_nonce($_POST["_wpnonce"], "pay_invoice_{$invoice_to_pay_id}") ){
+        update_post_meta($invoice_to_pay_id, '_paid', 1);
+        echo '<div class="notice notice-success"><p>'.__('Thank you for your payment. The invoice has been marked as paid.', 'sina-amiri').'</p></div>';
+        // Refresh to show updated status
+        echo "<meta http-equiv='refresh' content='1;url=" . esc_url(add_query_arg('screen', 'payments', get_permalink())) . "'>";
+      } else {
+        echo '<div class="notice notice-error"><p>'.__('Security check failed or invalid invoice ID. Payment not processed.', 'sina-amiri').'</p></div>';
+      }
+    }
+  ?>
 
     <?php else: ?>
       <p>Page not found!</p>

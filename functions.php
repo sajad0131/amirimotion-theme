@@ -1577,50 +1577,234 @@ function amiri_theme_update_project_status( $post_id ) {
 add_action( 'save_post_project', 'amiri_theme_update_project_status', 10, 1 );
 
   
-  // 4a) Register Invoice CPT
+  // --- INVOICE FUNCTIONALITY ---
+
+// 4a) Register/Update Invoice CPT
 add_action('init', function(){
-    $labels = [ 'name'=>'Invoices','singular_name'=>'Invoice','menu_name'=>'Invoices' ];
+    $labels = [
+        'name'               => __('Invoices', 'sina-amiri'),
+        'singular_name'      => __('Invoice', 'sina-amiri'),
+        'add_new_item'       => __('Add New Invoice', 'sina-amiri'),
+        'edit_item'          => __('Edit Invoice', 'sina-amiri'),
+        'view_item'          => __('View Invoice', 'sina-amiri'),
+        'all_items'          => __('All Invoices', 'sina-amiri'),
+        'menu_name'          => __('Invoices', 'sina-amiri'),
+    ];
     register_post_type('invoice', [
-      'labels'=>$labels,
-      'public'=>false,
-      'show_ui'=>true,
-      'supports'=>['title','custom-fields','author'],
-      'map_meta_cap'=>true,
+      'labels'         => $labels,
+      'public'         => false, // Keep false if only viewable via dashboard/admin
+      'show_ui'        => true,
+      'show_in_menu'   => true, // Or 'edit.php?post_type=project' to nest under Projects
+      'supports'       => ['title', 'editor', 'author', 'custom-fields'], // Added 'editor'
+      'map_meta_cap'   => true,
+      'menu_icon'      => 'dashicons-media-text',
     ]);
-  });
-  
-  // 4b) When viewing a Project in admin, add “Create Invoice” button
-  add_action('add_meta_boxes_project', function(){
-    add_meta_box('project_invoice','Invoice','render_project_invoice_metabox','project','side','default');
-  });
-  function render_project_invoice_metabox($post){
-    $inv = get_posts([ 'post_type'=>'invoice','meta_key'=>'project_id','meta_value'=>$post->ID ]);
-    if($inv){
-      echo '<p>Invoice already created: <a href="'.get_edit_post_link($inv[0]->ID).'">#'.$inv[0]->ID.'</a></p>';
+});
+
+// 4b) When viewing a Project in admin, add “Create Invoice” button/meta box
+add_action('add_meta_boxes_project', function(){
+    add_meta_box('project_invoice_metabox', __('Invoice Actions', 'sina-amiri'), 'render_project_invoice_metabox', 'project', 'side', 'high');
+});
+
+function render_project_invoice_metabox($post){
+    // Check if an invoice already exists for this project
+    $existing_invoices = get_posts([
+        'post_type'   => 'invoice',
+        'meta_key'    => '_project_id',
+        'meta_value'  => $post->ID,
+        'post_status' => 'any', // Check for any status
+        'numberposts' => 1
+    ]);
+
+    if($existing_invoices){
+        $invoice = $existing_invoices[0];
+        echo '<p>'.__('Invoice already created:', 'sina-amiri').' <a href="'.get_edit_post_link($invoice->ID).'">#'.$invoice->ID.' - '.$invoice->post_title.'</a></p>';
+        echo '<p><strong>'.__('Status:', 'sina-amiri').'</strong> '. (get_post_meta($invoice->ID, '_paid', true) ? __('Paid', 'sina-amiri') : __('Unpaid', 'sina-amiri')) .'</p>';
+        echo '<p><strong>'.__('Amount:', 'sina-amiri').'</strong> $'. esc_html(get_post_meta($invoice->ID, '_amount', true)) .'</p>';
     } else {
-      echo '<form method="post">';
-      wp_nonce_field('create_invoice','invoice_nonce');
-      echo '<p><label>Amount: <input name="invoice_amount" type="number" step="0.01" required></label></p>';
-      echo '<button name="create_invoice" class="button button-primary">Create Invoice</button>';
-      echo '</form>';
+        wp_nonce_field('create_invoice_for_project_'.$post->ID, 'invoice_nonce');
+        echo '<p><label for="invoice_amount">'.__('Invoice Amount:', 'sina-amiri').'</label><br>';
+        echo '<input name="invoice_amount" id="invoice_amount" type="number" step="0.01" required style="width:100%;"></p>';
+        echo '<button type="submit" name="create_invoice_submit" value="1" class="button button-primary">'.__('Create Invoice', 'sina-amiri').'</button>';
+        echo '<p class="description">'.__('Clicking "Create Invoice" will also save/update the project.', 'sina-amiri').'</p>';
     }
-  }
-  add_action('save_post_project', function($post_id){
-    if( ! empty($_POST['create_invoice']) && wp_verify_nonce($_POST['invoice_nonce'],'create_invoice') ){
-      $amt = floatval($_POST['invoice_amount']);
-      $inv_id = wp_insert_post([
-        'post_type'=>'invoice',
-        'post_title'=> 'Invoice for Project '.$post_id,
-        'post_status'=>'publish',
-        'post_author'=> get_post_field('post_author',$post_id),
-      ]);
-      if($inv_id){
-        update_post_meta($inv_id,'project_id',$post_id);
-        update_post_meta($inv_id,'amount',$amt);
-        update_post_meta($inv_id,'paid',0);
-      }
+}
+
+// 4c) Handle Invoice Creation from Project Edit Screen (during project save/update)
+add_action('save_post_project', function($post_id){
+    // Check if our "Create Invoice" button was clicked and nonce is valid
+    if (empty($_POST['create_invoice_submit']) || !isset($_POST['invoice_nonce']) || !wp_verify_nonce($_POST['invoice_nonce'], 'create_invoice_for_project_'.$post_id)) {
+        return;
     }
-  });
+
+    // Don't create if autosaving, or if it's a revision
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (wp_is_post_revision($post_id)) return;
+
+    // Check if an invoice already exists to prevent duplicates
+    $existing_invoices = get_posts([
+        'post_type'   => 'invoice',
+        'meta_key'    => '_project_id',
+        'meta_value'  => $post_id,
+        'post_status' => 'any',
+        'numberposts' => 1
+    ]);
+    if ($existing_invoices) {
+        // Optionally, add an admin notice that an invoice already exists
+        return;
+    }
+
+    $project_post = get_post($post_id);
+    $project_author_id = $project_post->post_author;
+    $project_title = $project_post->post_title;
+    $client_info = get_userdata($project_author_id);
+    $client_name = $client_info ? $client_info->display_name : __('N/A', 'sina-amiri');
+    $client_email = $client_info ? $client_info->user_email : __('N/A', 'sina-amiri');
+
+    $invoice_amount = isset($_POST['invoice_amount']) ? floatval(sanitize_text_field($_POST['invoice_amount'])) : 0;
+
+    if ($invoice_amount <= 0) {
+        // Optionally, set an admin notice that amount is required
+        return;
+    }
+
+    $invoice_id = wp_insert_post([
+        'post_type'   => 'invoice',
+        'post_title'  => sprintf(__('Invoice for %s', 'sina-amiri'), $project_title),
+        'post_status' => 'publish', // Or 'draft' if you want admins to review first
+        'post_author' => $project_author_id, // Assign to the client for dashboard visibility
+        'post_content'=> sprintf(__('Invoice details for project: %s.', 'sina-amiri'), $project_title), // Default content
+    ]);
+
+    if ($invoice_id && !is_wp_error($invoice_id)) {
+        update_post_meta($invoice_id, '_project_id', $post_id);
+        update_post_meta($invoice_id, '_amount', $invoice_amount);
+        update_post_meta($invoice_id, '_paid', 0); // 0 for unpaid, 1 for paid
+        update_post_meta($invoice_id, '_invoice_date', current_time('mysql'));
+        // You can add a due date, e.g., 30 days from now:
+        // update_post_meta($invoice_id, '_due_date', date('Y-m-d H:i:s', strtotime('+30 days', current_time('timestamp'))));
+        update_post_meta($invoice_id, '_client_name', $client_name);
+        update_post_meta($invoice_id, '_client_email', $client_email);
+
+        // Optional: Add an admin notice for success
+        add_action('admin_notices', function() use ($invoice_id) {
+            echo '<div class="notice notice-success is-dismissible"><p>'.sprintf(__('Invoice #%d created successfully. <a href="%s">Edit Invoice</a>', 'sina-amiri'), $invoice_id, get_edit_post_link($invoice_id)).'</p></div>';
+        });
+    } else {
+        // Optional: Add an admin notice for failure
+        add_action('admin_notices', function() {
+            echo '<div class="notice notice-error is-dismissible"><p>'.__('Failed to create invoice.', 'sina-amiri').'</p></div>';
+        });
+    }
+}, 10, 1); // Priority 10, 1 argument ($post_id)
+
+// 4d) Add Meta Box to Invoice CPT for detailed information
+add_action('add_meta_boxes_invoice', function() {
+    add_meta_box(
+        'invoice_details_metabox',
+        __('Invoice Details', 'sina-amiri'),
+        'render_invoice_details_metabox',
+        'invoice',
+        'normal', // 'normal' for main column, 'side' for sidebar
+        'high'
+    );
+});
+
+function render_invoice_details_metabox($post) {
+    wp_nonce_field('save_invoice_details_nonce_'.$post->ID, 'invoice_details_nonce');
+
+    $project_id    = get_post_meta($post->ID, '_project_id', true);
+    $amount        = get_post_meta($post->ID, '_amount', true);
+    $is_paid       = get_post_meta($post->ID, '_paid', true);
+    $invoice_date  = get_post_meta($post->ID, '_invoice_date', true);
+    $due_date      = get_post_meta($post->ID, '_due_date', true);
+    $client_name   = get_post_meta($post->ID, '_client_name', true);
+    $client_email  = get_post_meta($post->ID, '_client_email', true);
+
+    ?>
+    <table class="form-table">
+        <tbody>
+            <tr>
+                <th><label for="invoice_project_id"><?php _e('Related Project:', 'sina-amiri'); ?></label></th>
+                <td>
+                    <?php if ($project_id && get_post($project_id)): ?>
+                        <a href="<?php echo get_edit_post_link($project_id); ?>"><?php echo get_the_title($project_id); ?> (ID: <?php echo $project_id; ?>)</a>
+                        <input type="hidden" name="invoice_project_id" value="<?php echo esc_attr($project_id); ?>">
+                    <?php else: ?>
+                        <input type="number" id="invoice_project_id" name="invoice_project_id" value="<?php echo esc_attr($project_id); ?>" placeholder="<?php _e('Enter Project ID if unlinked', 'sina-amiri'); ?>">
+                        <p class="description"><?php _e('Manually link to a project if needed.', 'sina-amiri'); ?></p>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="invoice_client_name"><?php _e('Client Name:', 'sina-amiri'); ?></label></th>
+                <td><input type="text" id="invoice_client_name" name="invoice_client_name" value="<?php echo esc_attr($client_name); ?>" class="regular-text"></td>
+            </tr>
+            <tr>
+                <th><label for="invoice_client_email"><?php _e('Client Email:', 'sina-amiri'); ?></label></th>
+                <td><input type="email" id="invoice_client_email" name="invoice_client_email" value="<?php echo esc_attr($client_email); ?>" class="regular-text"></td>
+            </tr>
+            <tr>
+                <th><label for="invoice_amount_field"><?php _e('Amount ($):', 'sina-amiri'); ?></label></th>
+                <td><input type="number" step="0.01" id="invoice_amount_field" name="invoice_amount_field" value="<?php echo esc_attr($amount); ?>" class="regular-text"></td>
+            </tr>
+            <tr>
+                <th><label for="invoice_date"><?php _e('Invoice Date:', 'sina-amiri'); ?></label></th>
+                <td><input type="datetime-local" id="invoice_date" name="invoice_date" value="<?php echo esc_attr($invoice_date ? date('Y-m-d\TH:i:s', strtotime($invoice_date)) : ''); ?>" class="regular-text"></td>
+            </tr>
+            <tr>
+                <th><label for="invoice_due_date"><?php _e('Due Date:', 'sina-amiri'); ?></label></th>
+                <td><input type="datetime-local" id="invoice_due_date" name="invoice_due_date" value="<?php echo esc_attr($due_date ? date('Y-m-d\TH:i:s', strtotime($due_date)) : ''); ?>" class="regular-text"></td>
+            </tr>
+            <tr>
+                <th><label for="invoice_status"><?php _e('Status:', 'sina-amiri'); ?></label></th>
+                <td>
+                    <select id="invoice_status" name="invoice_status">
+                        <option value="0" <?php selected($is_paid, 0); ?>><?php _e('Unpaid', 'sina-amiri'); ?></option>
+                        <option value="1" <?php selected($is_paid, 1); ?>><?php _e('Paid', 'sina-amiri'); ?></option>
+                    </select>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <p><strong><?php _e('Invoice Items/Details:', 'sina-amiri'); ?></strong></p>
+    <p><?php _e('Use the main content editor above to add line items, descriptions, terms, or any other information for this invoice.', 'sina-amiri'); ?></p>
+    <?php
+}
+
+// 4e) Save Invoice Meta Details
+add_action('save_post_invoice', function($post_id){
+    if (!isset($_POST['invoice_details_nonce']) || !wp_verify_nonce($_POST['invoice_details_nonce'], 'save_invoice_details_nonce_'.$post_id)) {
+        return;
+    }
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (wp_is_post_revision($post_id)) return;
+    if (!current_user_can('edit_post', $post_id)) return;
+
+    // Sanitize and save each field
+    if (isset($_POST['invoice_project_id'])) {
+        update_post_meta($post_id, '_project_id', intval($_POST['invoice_project_id']));
+    }
+    if (isset($_POST['invoice_client_name'])) {
+        update_post_meta($post_id, '_client_name', sanitize_text_field($_POST['invoice_client_name']));
+    }
+    if (isset($_POST['invoice_client_email'])) {
+        update_post_meta($post_id, '_client_email', sanitize_email($_POST['invoice_client_email']));
+    }
+    if (isset($_POST['invoice_amount_field'])) {
+        update_post_meta($post_id, '_amount', floatval(sanitize_text_field($_POST['invoice_amount_field'])));
+    }
+    if (isset($_POST['invoice_date'])) {
+        update_post_meta($post_id, '_invoice_date', sanitize_text_field($_POST['invoice_date']));
+    }
+    if (isset($_POST['invoice_due_date'])) {
+        update_post_meta($post_id, '_due_date', sanitize_text_field($_POST['invoice_due_date']));
+    }
+    if (isset($_POST['invoice_status'])) {
+        update_post_meta($post_id, '_paid', intval($_POST['invoice_status']));
+    }
+});
+
   
 
 
