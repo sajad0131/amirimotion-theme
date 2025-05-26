@@ -1890,3 +1890,28 @@ function render_single_project_chat( $project_id ){
     </script>
     <?php
 }
+
+
+
+function amiri_custom_login_redirect( $redirect_to, $request, $user ) {
+    //is there a user to check?
+    if ( isset( $user->roles ) && is_array( $user->roles ) ) {
+        //check for admins
+        if ( in_array( 'administrator', $user->roles ) ) {
+            // redirect them to the default place
+            return admin_url();
+        } else {
+            // redirect them to the client dashboard page
+            // Replace 'client-dashboard' with the actual slug of your client dashboard page if it's different
+            $dashboard_page = get_page_by_path('client-dashboard');
+            if ($dashboard_page) {
+                return get_permalink($dashboard_page->ID);
+            }
+            // Fallback to home url if dashboard page doesn't exist
+            return home_url();
+        }
+    } else {
+        return $redirect_to;
+    }
+}
+add_filter( 'login_redirect', 'amiri_custom_login_redirect', 10, 3 );
