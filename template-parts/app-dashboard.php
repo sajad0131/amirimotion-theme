@@ -161,7 +161,7 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
     <nav>
       <a href="<?php echo add_query_arg('screen', 'home', get_permalink()); ?>">Home</a>
       <a href="<?php echo add_query_arg('screen', 'messages', get_permalink()); ?>">Messages</a>
-      <a href="<?php echo add_query_arg('screen', 'files', get_permalink()); ?>">Files</a>
+      <!-- <a href="<?php // echo add_query_arg('screen', 'files', get_permalink()); ?>">Files</a> -->
       <a href="<?php echo add_query_arg('screen', 'projects', get_permalink()); ?>">New Project</a>
       <a href="<?php echo add_query_arg('screen', 'stats', get_permalink()); ?>">Projects Stats</a>
       <a href="<?php echo add_query_arg('screen', 'services', get_permalink()); ?>">Services & Plans</a>
@@ -669,77 +669,234 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
 
 
 
-    <?php elseif ($screen == 'payments') : ?>
-      <h2><?php _e('Invoices & Payments', 'sina-amiri'); ?></h2>
+      <?php elseif ($screen == 'payments') : ?>
+    <h2>Payments</h2>
     <?php
     $invoices = get_posts([
       'post_type' => 'invoice',
       'author'    => $current_user->ID,
       'orderby'   => 'date',
       'order'     => 'DESC',
-      'posts_per_page' => -1,
+      // Consider adding pagination for many invoices
+      // 'posts_per_page' => 10,
+      // 'paged' => get_query_var('paged') ? get_query_var('paged') : 1,
     ]);
 
-    if( $invoices ) {
-      echo '<ul>';
-      foreach($invoices as $inv){
-        $invoice_id    = $inv->ID;
-        $project_id    = get_post_meta($invoice_id, '_project_id', true);
-        $project_title = $project_id ? get_the_title($project_id) : __('General Invoice', 'sina-amiri');
-        $amount        = get_post_meta($invoice_id, '_amount', true);
-        $is_paid       = get_post_meta($invoice_id, '_paid', true);
-        $invoice_date  = get_post_meta($invoice_id, '_invoice_date', true);
-        $invoice_content = $inv->post_content; // Get the invoice description/content
+    if ( $invoices ) : ?>
+        <table class="amiri-invoices-table">
+            <thead>
+                <tr>
+                    <th>Invoice ID</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ( $invoices as $inv ) :
+                    $invoice_id = $inv->ID;
+                    $amount = get_post_meta( $invoice_id, 'amount', true );
+                    $is_paid = get_post_meta( $invoice_id, 'paid', true );
+                    $invoice_date = get_the_date( 'Y-m-d', $invoice_id ); // Get invoice date
+                    $project_id = get_post_meta( $invoice_id, 'project_id', true); // Get associated project ID
+                    $detail_url = add_query_arg(
+                      [
+                          'screen'     => 'invoice_detail',
+                          'invoice_id' => $invoice_id,
+                      ],
+                      get_permalink()
+                  );
+                ?>
+                    <tr>
+                        <td>#<?php echo esc_html( $invoice_id ); ?></td>
+                        <td><?php echo esc_html( $invoice_date ); ?></td>
+                        <td>$<?php echo esc_html( number_format( (float)$amount, 2 ) ); ?></td>
+                        <td>
+                            <?php if ( $is_paid ) : ?>
+                              <a href="<?php echo esc_url($detail_url); ?>" class="button">View Details</a>
+                                <span class="invoice-status paid">Paid</span>
+                            <?php else : ?>
+                                <span class="invoice-status unpaid">Unpaid</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if ( ! $is_paid ) : ?>
+                              <a href="<?php echo esc_url($detail_url); ?>" class="button">View Details</a>
+                                <form method="post" style="display:inline-block; margin-right: 10px;">
+                                    <?php wp_nonce_field( "pay_invoice_{$invoice_id}" ); ?>
+                                    
+                                    <button type="submit" name="pay_invoice" value="<?php echo esc_attr( $invoice_id ); ?>" class="button-primary">Pay Now</button>
+                                </form>
+                            <?php endif; ?>
+                            <?php
+                            // Optional: Add a "View Details" link/button
+                            // This would typically link to a page showing more invoice details
+                            // For example: add_query_arg(['screen' => 'invoice_details', 'invoice_id' => $invoice_id], get_permalink())
+                            ?>
+                            <?php if ($project_id):
+                                $project_title = get_the_title($project_id);
+                                $project_chat_url = add_query_arg([
+                                    'screen'     => 'messages',
+                                    'project_id' => $project_id,
+                                ], get_permalink());
+                            ?>
+                                <a href="<?php echo esc_url($project_chat_url); ?>" class="button">View Project Chat</a>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php
+            // Optional: Add pagination if you have many invoices
+            // $big = 999999999; // need an unlikely integer
+            // echo paginate_links( array(
+            // 'base' => str_replace( $big, '%#%', esc_url( get_pagenum_link( $big ) ) ),
+            // 'format' => '?paged=%#%',
+            // 'current' => max( 1, get_query_var('paged') ),
+            // 'total' => $your_query->max_num_pages // Assuming you store your WP_Query in $your_query
+            // ) );
+        ?>
+    <?php else : ?>
+        <p>No invoices yet.</p>
+    <?php endif;
 
-        echo '<li>';
-        echo '<strong>'. esc_html($inv->post_title) . '</strong>';
-        if ($project_id) {
-            echo ' ('.__('for project:', 'sina-amiri').' ' . esc_html($project_title) . ')';
-        }
-        echo '<br>';
-        echo __('Invoice ID:', 'sina-amiri').' #'. esc_html($invoice_id) .'<br>';
-        echo __('Amount:', 'sina-amiri').' $'. number_format(floatval($amount), 2) .'<br>';
-        echo __('Date:', 'sina-amiri').' '. ($invoice_date ? date_i18n(get_option('date_format'), strtotime($invoice_date)) : __('N/A', 'sina-amiri')) .'<br>';
-        echo __('Status:', 'sina-amiri').' '. ($is_paid ? '<span style="color:green;">'.__('Paid', 'sina-amiri').'</span>' : '<span style="color:red;">'.__('Unpaid', 'sina-amiri').'</span>');
-
-        if( ! $is_paid ) {
-          ?>
-          <form method="post" style="display:inline; margin-left: 10px;">
-            <?php wp_nonce_field("pay_invoice_{$invoice_id}"); ?>
-            <input type="hidden" name="invoice_to_pay_id" value="<?php echo esc_attr($invoice_id); ?>">
-            <button type="submit" name="pay_invoice_button" value="pay"><?php _e('Pay Now', 'sina-amiri'); ?></button>
-          </form>
-          <?php
-        }
-        // Display the invoice description
-        if (!empty($invoice_content)) {
-            echo '<div class="invoice-description">' . wpautop(wp_kses_post($invoice_content)) . '</div>';
-        }
-        echo '</li><hr>';
-      }
-      echo '</ul>';
-    } else {
-      echo '<p>'.__('You have no invoices at the moment.', 'sina-amiri').'</p>';
-    }
-
-    // Handle payment
-    if( $_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['pay_invoice_button']) && isset($_POST['invoice_to_pay_id']) ){
-      $invoice_to_pay_id = intval($_POST['invoice_to_pay_id']);
-      if( isset($_POST['_wpnonce']) && wp_verify_nonce($_POST["_wpnonce"], "pay_invoice_{$invoice_to_pay_id}") ){
-        update_post_meta($invoice_to_pay_id, '_paid', 1);
-        echo '<div class="notice notice-success"><p>'.__('Thank you for your payment. The invoice has been marked as paid.', 'sina-amiri').'</p></div>';
-        // Refresh to show updated status
-        echo "<meta http-equiv='refresh' content='1;url=" . esc_url(add_query_arg('screen', 'payments', get_permalink())) . "'>";
-      } else {
-        echo '<div class="notice notice-error"><p>'.__('Security check failed or invalid invoice ID. Payment not processed.', 'sina-amiri').'</p></div>';
+    // Handle payment (existing code)
+    if ( $_SERVER['REQUEST_METHOD'] === 'POST' && !empty( $_POST['pay_invoice'] ) ){
+      $iid = intval( $_POST['pay_invoice'] );
+      if ( wp_verify_nonce( $_POST["_wpnonce"], "pay_invoice_{$iid}" ) ){
+        update_post_meta( $iid, 'paid', 1 );
+        // Refresh the page to show the updated status
+        echo '<p class="invoice-paid-message">Thank you — invoice paid. Refreshing...</p>';
+        echo '<script type="text/javascript">setTimeout(function(){ window.location.href = "' . esc_url(add_query_arg('screen', 'payments', get_permalink())) . '"; }, 1500);</script>';
       }
     }
   ?>
 
-    <?php else: ?>
-      <p>Page not found!</p>
+<?php elseif ($screen == 'invoice_detail') : ?>
+            <h2>Invoice Detail</h2>
+            <?php
+            $invoice_to_show_id = isset($_GET['invoice_id']) ? intval($_GET['invoice_id']) : 0;
 
-    <?php endif; ?>
+            if ($invoice_to_show_id > 0) {
+                $invoice_post = get_post($invoice_to_show_id);
+
+                // Verify the invoice belongs to the current user and is an 'invoice' CPT
+                if ($invoice_post && $invoice_post->post_type == 'invoice' && $invoice_post->post_author == $current_user->ID) {
+                    $amount = get_post_meta($invoice_to_show_id, 'amount', true);
+                    $is_paid = get_post_meta($invoice_to_show_id, 'paid', true);
+                    $invoice_date = get_the_date('F j, Y', $invoice_to_show_id); // More readable date format
+                    $project_id = get_post_meta($invoice_to_show_id, 'project_id', true);
+                    $project_title = $project_id ? get_the_title($project_id) : 'N/A';
+
+                    // --- Agency Details (Example - consider making these theme options) ---
+                    $agency_name = "AmiriMotion Agency";
+                    $agency_address_line1 = "123 Creative Street";
+                    $agency_address_line2 = "Motion City, MC 54321";
+                    $agency_email = "billing@amirimotion.com";
+                    // --- Client Details ---
+                    $client_name = $current_user->display_name;
+                    $client_email = $current_user->user_email;
+
+                    ?>
+                    <div class="invoice-detail-container">
+                        <div class="invoice-header">
+                            <div class="agency-details">
+                                <h3><?php echo esc_html($agency_name); ?></h3>
+                                <p><?php echo esc_html($agency_address_line1); ?><br>
+                                <?php echo esc_html($agency_address_line2); ?><br>
+                                Email: <?php echo esc_html($agency_email); ?></p>
+                            </div>
+                            <div class="invoice-meta">
+                                <h1>INVOICE</h1>
+                                <p><strong>Invoice #:</strong> <?php echo esc_html($invoice_to_show_id); ?></p>
+                                <p><strong>Date:</strong> <?php echo esc_html($invoice_date); ?></p>
+                                <p><strong>Status:</strong>
+                                    <?php if ($is_paid) : ?>
+                                        <span class="invoice-status paid">Paid</span>
+                                    <?php else : ?>
+                                        <span class="invoice-status unpaid">Unpaid</span>
+                                    <?php endif; ?>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="billed-to">
+                            <h4>Billed To:</h4>
+                            <p><?php echo esc_html($client_name); ?><br>
+                            <?php echo esc_html($client_email); ?></p>
+                            <?php /* You might want to add more client address details if available from user profile */ ?>
+                        </div>
+
+                        <table class="invoice-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <?php /* Line Item - Basic Implementation */ ?>
+                                    <td>Service related to project: <?php echo esc_html($project_title); ?></td>
+                                    <td>$<?php echo esc_html(number_format((float)$amount, 2)); ?></td>
+                                </tr>
+                                <?php /*
+                                If you had line items stored as an array of arrays in post meta, e.g.,
+                                $line_items = get_post_meta($invoice_to_show_id, 'invoice_line_items', true);
+                                if (is_array($line_items)) {
+                                    foreach ($line_items as $item) {
+                                        echo '<tr>';
+                                        echo '<td>' . esc_html($item['description']) . '</td>';
+                                        echo '<td>$' . esc_html(number_format((float)$item['amount'], 2)) . '</td>';
+                                        echo '</tr>';
+                                    }
+                                }
+                                */?>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td class="text-right"><strong>Total:</strong></td>
+                                    <td><strong>$<?php echo esc_html(number_format((float)$amount, 2)); ?></strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <?php if (!$is_paid) : ?>
+                            <div class="invoice-payment-actions">
+                                <p><strong>Payment Due:</strong> $<?php echo esc_html(number_format((float)$amount, 2)); ?></p>
+                                <form method="post" action="<?php echo esc_url(add_query_arg('screen', 'payments', get_permalink())); ?>">
+                                    <?php wp_nonce_field("pay_invoice_{$invoice_to_show_id}"); ?>
+                                    <button type="submit" name="pay_invoice" value="<?php echo esc_attr($invoice_to_show_id); ?>" class="button-primary pay-now-button">Pay Now</button>
+                                </form>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="invoice-footer">
+                            <p>Thank you for your business!</p>
+                            <?php if ($project_id): ?>
+                                <p>This invoice is related to project: <a href="<?php echo esc_url(add_query_arg(['screen' => 'messages', 'project_id' => $project_id], get_permalink())); ?>"><?php echo esc_html($project_title); ?></a></p>
+                            <?php endif; ?>
+                        </div>
+
+                    </div>
+                    <p style="margin-top: 20px;"><a href="<?php echo esc_url(add_query_arg('screen', 'payments', get_permalink())); ?>" class="button">&laquo; Back to All Invoices</a></p>
+
+                    <?php
+                } else {
+                    echo '<p>Sorry, you do not have permission to view this invoice, or the invoice was not found.</p>';
+                    echo '<p><a href="' . esc_url(add_query_arg('screen', 'payments', get_permalink())) . '">&laquo; Back to All Invoices</a></p>';
+                }
+            } else {
+                echo '<p>No invoice selected.</p>';
+                echo '<p><a href="' . esc_url(add_query_arg('screen', 'payments', get_permalink())) . '">&laquo; Back to All Invoices</a></p>';
+            }
+            ?>
+
+<?php else: ?>
+    <p>Page not found!</p>
+<?php endif; ?>
 
   </div>
 
