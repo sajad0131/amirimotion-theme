@@ -2860,3 +2860,203 @@ font-size: 12px;
         gap: 10px;
     }
 }
+
+
+
+
+
+
+
+
+
+
+/* --- Home Screen Specific Styles --- */
+.welcome-banner {
+    background-color: #3498db; /* Primary blue */
+    color: white;
+    padding: 25px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+}
+
+.welcome-banner h2 {
+    margin-top: 0;
+    font-size: 2em; /* Larger welcome heading */
+    font-weight: 600;
+}
+.welcome-banner p {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+.dashboard-home-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive grid */
+    gap: 25px; /* Space between cards */
+    margin-top: 20px;
+}
+
+.info-card {
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05); /* Softer shadow */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.info-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+}
+
+.info-card h3 {
+    margin-top: 0;
+    color: #3498db; /* Blue for card titles */
+    font-size: 1.3em; /* Slightly larger card titles */
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee; /* Separator for title */
+    padding-bottom: 10px;
+}
+
+.info-card p {
+    font-size: 0.95em;
+    color: #555; /* Dark grey for text */
+    line-height: 1.6;
+}
+
+.info-card .stat {
+    font-size: 2.5em; /* Larger stat number */
+    font-weight: bold;
+    color: #2ecc71; /* Green for positive stats */
+    display: block;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.info-card .stat.neutral { /* For neutral or informational stats */
+    color: #3498db; /* Blue */
+}
+.info-card .stat.warning { /* For stats needing attention, like unpaid invoices */
+    color: #e74c3c; /* Red */
+}
+
+
+.quick-actions {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #dde3e0;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+}
+
+.quick-actions .btn {
+    background-color: #3498db;
+    color: white;
+    padding: 12px 20px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: 0.95em;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: inline-block; /* Ensure proper spacing and alignment */
+}
+
+.quick-actions .btn:hover {
+    background-color: #2980b9; /* Darker blue on hover */
+    transform: translateY(-2px); /* Slight lift on hover */
+}
+
+
+/* Chat Window Styles */
+.chat-window {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    background-color: #f9f9f9;
+}
+.chat-window .msg {
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+.chat-window .mine {
+    background-color: #3498db; /* User's messages */
+    color: white;
+    margin-left: auto; /* Align to right */
+    text-align: right;
+}
+.chat-window .theirs {
+    background-color: #ecf0f1; /* Other party's messages */
+    color: #333;
+    margin-right: auto; /* Align to left */
+    text-align: left;
+}
+.chat-window .msg strong {
+    display: block;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+    opacity: 0.8;
+}
+
+/* Form styling for message sending and file uploads */
+form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+form textarea, form input[type="file"], form input[type="text"], form select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box; /* Important for width calculations */
+}
+form button[type="submit"], form .btn {
+    background-color: #2ecc71; /* Green for submit buttons */
+    color: white;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.2s ease;
+}
+form button[type="submit"]:hover, form .btn:hover {
+    background-color: #27ae60; /* Darker green on hover */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    body.page-template-app-dashboard {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        min-height: auto;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .main {
+        padding: 20px;
+    }
+    .dashboard-home-grid {
+        grid-template-columns: 1fr; /* Stack cards on smaller screens */
+    }
+    .welcome-banner h2 {
+        font-size: 1.6em;
+    }
+    .welcome-banner p {
+        font-size: 1em;
+    }
+    .info-card .stat {
+        font-size: 2em;
+    }
+}

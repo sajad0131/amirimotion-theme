@@ -176,7 +176,96 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
     </header>
 
     <?php if ($screen == 'home') : ?>
-      <p>Welcome back, <?php echo esc_html($current_user->display_name); ?>!</p>
+    <div class="welcome-banner">
+        <h2>Welcome back, <?php echo esc_html($current_user->display_name); ?>!</h2>
+        <p>Here's a quick overview of your account.</p>
+    </div>
+
+    <div class="dashboard-home-grid">
+        <div class="info-card">
+            <h3>Active Projects</h3>
+            <?php
+            $active_projects_count = count(get_posts([
+                'post_type'      => 'project',
+                'post_status'    => ['reviewing','more_info','editing','sample_complete','waiting_review'], // Active statuses
+                'author'         => $current_user->ID,
+                'posts_per_page' => -1,
+                'fields'         => 'ids' // More efficient
+            ]));
+            ?>
+            <span class="stat"><?php echo esc_html($active_projects_count); ?></span>
+            <p>You have <?php echo esc_html($active_projects_count); ?> projects currently in progress.</p>
+        </div>
+
+        <div class="info-card">
+            <h3>Completed Projects</h3>
+            <?php
+            $completed_projects_count = count(get_posts([
+                'post_type'      => 'project',
+                'post_status'    => 'completed',
+                'author'         => $current_user->ID,
+                'posts_per_page' => -1,
+                'fields'         => 'ids'
+            ]));
+            ?>
+            <span class="stat"><?php echo esc_html($completed_projects_count); ?></span>
+            <p>A total of <?php echo esc_html($completed_projects_count); ?> projects have been completed.</p>
+        </div>
+        
+        <div class="info-card">
+            <h3>Recent Messages</h3>
+            <?php
+            $recent_messages = get_posts([
+                'post_type'   => 'message',
+                'author'      => $current_user->ID, // Or messages related to user's projects
+                'posts_per_page' => 1,
+                'orderby'     => 'date',
+                'order'       => 'DESC',
+            ]);
+            if ($recent_messages) {
+                $last_message = $recent_messages[0];
+                $project_id_for_message = get_post_meta($last_message->ID, 'project_id', true);
+                echo '<p><strong>Last Message:</strong> "' . esc_html(wp_trim_words($last_message->post_content, 10, '...')) . '"';
+                if($project_id_for_message){
+                     echo ' (Project #'.esc_html($project_id_for_message).')';
+                }
+                echo '</p>';
+                echo '<p><small>Sent on: ' . esc_html(get_the_date('', $last_message->ID)) . '</small></p>';
+            } else {
+                echo '<p>No recent messages.</p>';
+            }
+            ?>
+        </div>
+
+        <div class="info-card">
+            <h3>Unpaid Invoices</h3>
+            <?php
+            $unpaid_invoices_count = 0;
+            $invoices = get_posts([
+              'post_type'=>'invoice',
+              'author'   => $current_user->ID,
+              'meta_query' => [
+                  [
+                      'key' => 'paid',
+                      'value' => '0',
+                      'compare' => '='
+                  ]
+              ],
+              'posts_per_page' => -1,
+              'fields' => 'ids'
+            ]);
+            $unpaid_invoices_count = count($invoices);
+            ?>
+            <span class="stat"><?php echo esc_html($unpaid_invoices_count); ?></span>
+            <p>You have <?php echo esc_html($unpaid_invoices_count); ?> pending payments.</p>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <a href="<?php echo add_query_arg('screen', 'projects', get_permalink()); ?>" class="btn">Start a New Project</a>
+        <a href="<?php echo add_query_arg('screen', 'stats', get_permalink()); ?>" class="btn">View All Projects</a>
+        <a href="<?php echo add_query_arg('screen', 'payments', get_permalink()); ?>" class="btn">View Invoices</a>
+    </div>
 
     <?php elseif ($screen == 'messages') : ?>
       <div class="dashboard-section messages-section">

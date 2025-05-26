@@ -1517,16 +1517,64 @@ add_action('add_meta_boxes', function(){
     }
     echo '</select>';
   }
-  add_action('save_post_project', function($post_id){
-    if ( ! isset($_POST['project_status_nonce']) || ! wp_verify_nonce($_POST['project_status_nonce'],'save_project_status') ) return;
-    if ( isset($_POST['project_status']) ) {
-      $new = sanitize_text_field($_POST['project_status']);
-      wp_update_post([
-        'ID'          => $post_id,
-        'post_status' => $new,
-      ]);
+  /**
+ * Handles updating the project status when a project post is saved.
+ * Prevents infinite loops by unhooking and re-hooking the action.
+ */
+function amiri_theme_update_project_status( $post_id ) {
+    // If this is just a revision, don't send the email.
+    if ( wp_is_post_revision( $post_id ) ) {
+        return;
     }
-  });
+
+    // Check if our nonce is set.
+    if ( ! isset( $_POST['project_status_nonce'] ) ) {
+        return;
+    }
+    // Verify that the nonce is valid.
+    if ( ! wp_verify_nonce( $_POST['project_status_nonce'], 'save_project_status' ) ) {
+        return;
+    }
+
+    // If this is an autosave, our form has not been submitted, so we don't want to do anything.
+    if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+        return;
+    }
+
+    // Check the user's permissions.
+    if ( isset( $_POST['post_type'] ) && 'project' == $_POST['post_type'] ) {
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            return;
+        }
+    } else {
+        // Not a 'project' post type, so bail.
+        return;
+    }
+
+    // Check if project_status is set in the submitted data.
+    if ( isset( $_POST['project_status'] ) ) {
+        $new_status = sanitize_text_field( $_POST['project_status'] );
+        $current_status = get_post_status( $post_id );
+
+        // Only update if the status is actually different and is a valid status.
+        // This also helps prevent loops if something else tries to update the post with the same status.
+        if ( $new_status !== $current_status && get_post_status_object( $new_status ) ) {
+
+            // Unhook this function so it doesn't loop infinitely
+            remove_action( 'save_post_project', 'amiri_theme_update_project_status', 10, 1 );
+
+            // Update the post, which might call save_post again (but our function is unhooked)
+            wp_update_post( array(
+                'ID'            => $post_id,
+                'post_status'   => $new_status
+            ) );
+
+            // Re-hook this function
+            add_action( 'save_post_project', 'amiri_theme_update_project_status', 10, 1 );
+        }
+    }
+}
+add_action( 'save_post_project', 'amiri_theme_update_project_status', 10, 1 );
 
   
   // 4a) Register Invoice CPT
