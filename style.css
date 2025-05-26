@@ -2607,7 +2607,7 @@ font-size: 12px;
 .main {
     flex: 1;
     padding: 30px 40px; /* More padding */
-    background-color: #f4f7f6; /* Very light off-white for main content */
+    
 }
 .main header {
     margin-bottom: 30px;
