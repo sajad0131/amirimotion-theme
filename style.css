@@ -2428,3 +2428,191 @@ font-size: 12px;
 .call-to-action {
     min-height: 200px;
 }
+
+
+
+/* style for Client Dashboard (project stats) */
+
+/* General Dashboard Styles (if not already present) */
+.dashboard-section {
+    background-color: #f9f9f9; /* Light grey background for sections */
+    padding: 25px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-section .section-title {
+    font-size: 1.8em;
+    color: #333;
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+/* Project Stats Specific Styles */
+.project-stats .project-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Responsive grid */
+    gap: 25px;
+}
+
+.project-item {
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.project-item:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+}
+
+.project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.project-title {
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #00002c; /* Your theme's dark blue */
+    margin: 0;
+}
+
+.project-status-label {
+    font-size: 0.85em;
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.project-details {
+    margin-top: auto; /* Pushes details to the bottom if card height varies */
+}
+
+.progress-bar-container {
+    width: 100%;
+    background-color: #e0e0e0;
+    border-radius: 25px;
+    margin-bottom: 15px;
+    height: 22px; /* Slightly taller for better text visibility */
+    overflow: hidden; /* Ensures inner bar stays rounded */
+}
+
+.progress-bar {
+    height: 100%;
+    line-height: 22px; /* Vertically center text */
+    color: white;
+    text-align: center;
+    font-size: 0.8em;
+    font-weight: bold;
+    border-radius: 25px 0 0 25px; /* Keep left side rounded */
+    transition: width 0.5s ease-in-out;
+}
+
+.progress-bar:empty { /* If progress is 0%, might not need text */
+    text-indent: -9999px;
+}
+
+
+.project-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.action-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.action-link .icon {
+    margin-right: 6px;
+    font-size: 1.1em;
+}
+
+.view-chat-link {
+    background-color: #00002c; /* Your theme's dark blue */
+    color: #fff;
+}
+
+.view-chat-link:hover {
+    background-color: #001f5c; /* Darker shade for hover */
+}
+
+.no-projects {
+    text-align: center;
+    font-size: 1.1em;
+    color: #555;
+    padding: 30px;
+}
+.no-projects a {
+    color: #00002c;
+    text-decoration: underline;
+}
+
+/* Sidebar Enhancements (Optional - adjust as per your full dashboard design) */
+.sidebar {
+    background: #00002c; /* Dark blue from your theme */
+    color: #fff;
+    padding: 25px;
+    width: 250px; /* Slightly wider */
+    min-height: 100vh;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+.sidebar h2 {
+    font-size: 1.6em;
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    text-align: center;
+}
+.sidebar nav a {
+    color: #f0f0f0;
+    display: flex; /* For icon alignment */
+    align-items: center;
+    padding: 12px 15px;
+    margin: 8px 0;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-size: 1.05em;
+}
+.sidebar nav a:hover,
+.sidebar nav a.active-screen { /* Add .active-screen class dynamically if needed */
+    background-color: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-weight: 500;
+}
+.sidebar nav a .icon { /* Example if you add icons to nav links */
+    margin-right: 10px;
+}
+
+/* Main Content Area */
+.main {
+    flex: 1;
+    padding: 30px 40px; /* More padding */
+    background-color: #f4f7f6; /* Very light off-white for main content */
+}
+.main header {
+    margin-bottom: 30px;
+}
+.main header h1 {
+    font-size: 2.2em; /* Larger screen titles */
+    color: #00002c;
+}
