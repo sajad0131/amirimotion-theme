@@ -211,32 +211,76 @@ if ( ! $current_project ) {
       ?>
     </ul>
 
-  <?php elseif ($screen == 'stats') : ?>
-    <h2>Your Projects Stats</h2>
-    <ul>
-      <?php
-      $projects = get_posts([
-        'post_type'      => 'project',
-        'post_status'    => [ 'reviewing','more_info','editing','sample_complete','waiting_review','completed' ],
-        'author'         => $current_user->ID,
-        'posts_per_page' => -1
-      ]);
-      
-      foreach ( $projects as $p ) {
-        $status = get_post_status_object( get_post_status($p->ID) )->label;
-        echo '<li><strong>' . esc_html( $p->post_title ) . '</strong>'
-           . ' – Status: ' . esc_html( $status )
-           // add a “View Chat” link passing project_id
-           . ' <a href="' 
-               . esc_url( add_query_arg([
-                   'screen'     => 'messages',
-                   'project_id' => $p->ID,
-                 ], get_permalink()) )
-               . '">View Chat</a>'
-           . '</li>';
-      }
-      
-      ?>
+    <?php elseif ($screen == 'stats') : ?>
+    <div class="dashboard-section project-stats">
+        <h2 class="section-title">Your Projects</h2>
+        <?php
+        $projects = get_posts([
+            'post_type'      => 'project',
+            'post_status'    => ['reviewing', 'more_info', 'editing', 'sample_complete', 'waiting_review', 'completed'],
+            'author'         => $current_user->ID,
+            'posts_per_page' => -1,
+            'orderby'        => 'date',
+            'order'          => 'DESC'
+        ]);
+
+        if ($projects) : ?>
+            <div class="project-list">
+                <?php
+                // Define a color map for statuses for visual consistency
+                $status_colors = [
+                    'reviewing'       => '#3498db', // Blue
+                    'more_info'       => '#f1c40f', // Yellow
+                    'editing'         => '#e67e22', // Orange
+                    'sample_complete' => '#1abc9c', // Turquoise
+                    'waiting_review'  => '#9b59b6', // Purple
+                    'completed'       => '#2ecc71', // Green
+                    'default'         => '#7f8c8d'  // Grey for any other status
+                ];
+
+                // Define order or progress for statuses (0 to 100)
+                $status_progress = [
+                    'reviewing'       => 15,
+                    'more_info'       => 30,
+                    'editing'         => 50,
+                    'sample_complete' => 75,
+                    'waiting_review'  => 85,
+                    'completed'       => 100,
+                ];
+
+                foreach ($projects as $p) :
+                    $project_status_slug = get_post_status($p->ID);
+                    $project_status_object = get_post_status_object($project_status_slug);
+                    $status_label = $project_status_object ? esc_html($project_status_object->label) : 'N/A';
+                    $status_color = $status_colors[$project_status_slug] ?? $status_colors['default'];
+                    $progress_value = $status_progress[$project_status_slug] ?? 0;
+                ?>
+                    <div class="project-item">
+                        <div class="project-header">
+                            <h3 class="project-title"><?php echo esc_html($p->post_title); ?></h3>
+                            <span class="project-status-label" style="background-color: <?php echo $status_color; ?>;">
+                                <?php echo $status_label; ?>
+                            </span>
+                        </div>
+                        <div class="project-details">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: <?php echo $progress_value; ?>%; background-color: <?php echo $status_color; ?>;">
+                                    <?php echo $progress_value; ?>%
+                                </div>
+                            </div>
+                            <div class="project-actions">
+                                <a href="<?php echo esc_url(add_query_arg(['screen' => 'messages', 'project_id' => $p->ID], get_permalink())); ?>" class="action-link view-chat-link">
+                                    <span class="icon">&#128172;</span> View Chat
+                                </a>
+                                </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php else : ?>
+            <p class="no-projects">You don't have any projects yet. <a href="<?php echo esc_url(add_query_arg('screen', 'projects', get_permalink())); ?>">Start a new project?</a></p>
+        <?php endif; ?>
+    </div>
     </ul>
 
   <?php elseif ($screen == 'services') : ?>
