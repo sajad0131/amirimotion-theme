@@ -2616,3 +2616,247 @@ font-size: 12px;
     font-size: 2.2em; /* Larger screen titles */
     color: #00002c;
 }
+
+
+/* Messages Section Specific Styles */
+.messages-section {
+    background-color: #f9f9f9;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.messages-section .section-title {
+    font-size: 1.8em;
+    color: #333;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+/* Project Selection List (if no project_id is in URL) */
+.project-selection-list {
+    list-style: none;
+    padding: 0;
+}
+.project-selection-list li a {
+    display: block;
+    padding: 12px 15px;
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    text-decoration: none;
+    color: #00002c;
+    font-weight: 500;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.project-selection-list li a:hover {
+    background-color: #f0f5fa;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.back-to-projects-link {
+    color: #00002c;
+    text-decoration: none;
+    font-size: 0.95em;
+    padding: 8px 12px;
+    border-radius: 5px;
+    background-color: #e9ecef;
+    transition: background-color 0.2s ease;
+}
+.back-to-projects-link:hover {
+    background-color: #dde2e6;
+}
+
+
+.chat-window-container {
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px; /* Padding for the container */
+    margin-bottom: 20px;
+    max-height: 500px; /* Or your desired height */
+    overflow-y: auto; /* Enables scrolling */
+}
+
+.chat-window {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Space between messages */
+}
+
+.chat-message {
+    display: flex;
+    align-items: flex-end; /* Aligns avatar with bottom of message bubble */
+    max-width: 75%;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.chat-message .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+    margin-left: 10px; /* For 'theirs' */
+    border: 2px solid #f0f0f0;
+}
+
+.chat-message.mine {
+    align-self: flex-end;
+    flex-direction: row-reverse; /* Avatar on the right */
+}
+.chat-message.mine .avatar {
+    margin-left: 10px;
+    margin-right: 0;
+}
+
+.chat-message .message-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-message.mine .message-content {
+    align-items: flex-end;
+}
+.chat-message.theirs .message-content {
+    align-items: flex-start;
+}
+
+.message-bubble {
+    padding: 10px 15px;
+    border-radius: 18px;
+    word-wrap: break-word;
+    position: relative;
+}
+
+.chat-message.mine .message-bubble {
+    background-color: #00002c; /* Your theme's dark blue for client messages */
+    color: #fff;
+    border-bottom-right-radius: 4px; /* Tail effect */
+}
+
+.chat-message.theirs .message-bubble {
+    background-color: #e9ecef; /* Light grey for admin/other messages */
+    color: #333;
+    border-bottom-left-radius: 4px; /* Tail effect */
+}
+
+.message-bubble .sender-name {
+    font-size: 0.8em;
+    font-weight: bold;
+    display: block;
+    margin-bottom: 4px;
+    color: inherit; /* Inherits color from parent bubble, or can be set specifically */
+}
+.chat-message.theirs .message-bubble .sender-name {
+    color: #555; /* Slightly darker for admin sender name if needed */
+}
+
+
+.message-bubble p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.timestamp {
+    font-size: 0.75em;
+    color: #777;
+    margin-top: 5px;
+}
+.chat-message.mine .timestamp {
+    align-self: flex-end;
+    margin-right: 5px;
+}
+.chat-message.theirs .timestamp {
+    align-self: flex-start;
+    margin-left: 5px;
+}
+
+
+.send-message-form {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px; /* Space above the form */
+    align-items: stretch; /* Make textarea and button same height */
+}
+
+.message-input {
+    flex-grow: 1;
+    padding: 12px 15px;
+    border: 1px solid #ccc;
+    border-radius: 25px; /* Pill shape */
+    font-size: 1em;
+    resize: none; /* Prevent manual resizing if desired */
+    min-height: 48px; /* Ensure a decent default height */
+    line-height: 1.4;
+}
+.message-input:focus {
+    outline: none;
+    border-color: #00002c;
+    box-shadow: 0 0 0 2px rgba(0, 0, 44, 0.2);
+}
+
+.send-button {
+    background-color: #00002c; /* Your theme's dark blue */
+    color: #fff;
+    border: none;
+    padding: 0 20px; /* Adjust padding for text and icon */
+    border-radius: 25px; /* Pill shape */
+    cursor: pointer;
+    font-size: 1em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+    min-height: 48px;
+}
+.send-button:hover {
+    background-color: #001f5c; /* Darker shade */
+}
+.send-button .button-text {
+    margin-right: 8px;
+}
+.send-button .button-icon {
+    font-size: 1.2em;
+    line-height: 1; /* Helps with vertical alignment */
+}
+
+.no-messages-yet, .error-message, .no-projects {
+    text-align: center;
+    color: #666;
+    font-size: 1.05em;
+    padding: 20px;
+    background-color: #f0f0f0;
+    border-radius: 6px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive adjustments for chat */
+@media (max-width: 768px) {
+    .chat-message {
+        max-width: 90%;
+    }
+    .main header h1 {
+        font-size: 1.8em;
+    }
+    .chat-header .section-title {
+        font-size: 1.5em;
+    }
+    .chat-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}

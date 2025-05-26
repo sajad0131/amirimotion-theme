@@ -101,8 +101,8 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
     .main { flex:1; padding: 30px; }
     textarea { width:100%; height:100px; }
     .msg { margin-bottom: 10px; padding: 10px; border-radius: 6px; }
-    .mine { background: #dcf8c6; text-align: right; }
-    .theirs { background: #eee; text-align: left; }
+    
+    
     ul { list-style: none; padding: 0; }
     li { margin: 5px 0; }
     header { margin-bottom: 20px; }
@@ -130,62 +130,119 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
   <?php if ($screen == 'home') : ?>
     <p>Welcome back, <?php echo esc_html($current_user->display_name); ?>!</p>
 
-    <?php elseif ( $screen == 'messages' ) :
+    <?php elseif ($screen == 'messages') : ?>
+    <div class="dashboard-section messages-section">
+        <?php
+        $current_project_id = isset($_GET['project_id']) ? intval($_GET['project_id']) : 0;
+        $current_client_id = get_current_user_id(); // Client's own ID
 
-// 2a) get the project_id from the URL
-$current_project = isset($_GET['project_id']) ? intval($_GET['project_id']) : 0;
+        if (!$current_project_id) :
+            // Get a list of projects for the current user to select from
+            $client_projects = get_posts([
+                'post_type'      => 'project',
+                'author'         => $current_client_id,
+                'posts_per_page' => -1,
+                'orderby'        => 'date',
+                'order'          => 'DESC'
+            ]);
+        ?>
+            <h2 class="section-title">Select a Project to View Messages</h2>
+            <?php if ($client_projects) : ?>
+                <ul class="project-selection-list">
+                    <?php foreach ($client_projects as $project_to_select) : ?>
+                        <li>
+                            <a href="<?php echo esc_url(add_query_arg(['screen' => 'messages', 'project_id' => $project_to_select->ID], get_permalink())); ?>">
+                                <?php echo esc_html($project_to_select->post_title); ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else : ?>
+                <p class="no-projects">You don't have any projects with messages yet.</p>
+            <?php endif; ?>
 
-if ( ! $current_project ) {
-  echo '<p><em>No project selected. Go back and click “View Chat” on a project.</em></p>';
-} else {
-  echo '<h2>Chat for Project #'.esc_html($current_project).'</h2>';
+        <?php else :
+            $project_post = get_post($current_project_id);
+            // Ensure the current user is the author of the project they are trying to view messages for, or an admin
+            if (!$project_post || ($project_post->post_author != $current_client_id && !current_user_can('edit_others_posts'))) {
+                echo '<p class="error-message">You do not have permission to view messages for this project, or the project does not exist.</p>';
+            } else {
+        ?>
+            <div class="chat-header">
+                <h2 class="section-title">Chat for: <?php echo esc_html($project_post->post_title); ?></h2>
+                <a href="<?php echo esc_url(add_query_arg('screen', 'stats', get_permalink())); ?>" class="back-to-projects-link">&larr; Back to Projects</a>
+            </div>
 
-  // 2b) fetch only messages for this project
-  $messages = get_posts([
-    'post_type'   => 'message',
-    'meta_query'  => [[
-       'key'   => 'project_id',
-       'value' => $current_project,
-       'type'  => 'NUMERIC',
-    ]],
-    'orderby'     => 'date',
-    'order'       => 'ASC',
-    'posts_per_page' => -1,
-  ]);
+            <div class="chat-window-container">
+                <div class="chat-window" id="chat-window">
+                    <?php
+                    $messages = get_posts([
+                        'post_type'   => 'message',
+                        'meta_query'  => [[
+                            'key'   => 'project_id',
+                            'value' => $current_project_id,
+                            'type'  => 'NUMERIC',
+                        ]],
+                        'orderby'     => 'date',
+                        'order'       => 'ASC',
+                        'posts_per_page' => -1,
+                    ]);
 
-  echo '<div class="chat-window">';
-  foreach( $messages as $m ){
-    $message_author_id = (int) $m->post_author; // Cast author ID to integer
-    $current_client_id = (int) get_current_user_id(); // Cast current user ID to integer
+                    if ($messages) {
+                        foreach ($messages as $m) {
+                            $message_author_id = (int) $m->post_author;
+                            $is_client_message = ($message_author_id == $current_client_id);
+                            $sender_info = get_userdata($message_author_id);
+                            $sender_name = $sender_info ? esc_html($sender_info->display_name) : ($is_client_message ? 'You' : 'Admin');
+                            $message_time = human_time_diff(get_post_time('U', true, $m), current_time('timestamp')) . ' ago';
+                            // A more precise time:
+                            // $message_time = get_the_time( 'M j, Y g:i a', $m );
 
-    if ($message_author_id == $current_client_id) { // Use == for robust comparison
-        // $who = 'You'; // Simple label
-        // Or, for more specific naming:
-        $current_user_info = get_userdata($current_client_id);
-        $who = $current_user_info ? esc_html($current_user_info->display_name) : 'You';
+                            $avatar_url = get_avatar_url($message_author_id, ['size' => 40, 'default' => 'mystery']);
 
-    } else {
-        // Message is from someone else (assumed Admin)
-        $author_info = get_userdata($message_author_id);
-        $who = $author_info ? esc_html($author_info->display_name) : 'Admin'; // Display Admin's name or "Admin"
-    }
-    // Use existing CSS classes for styling if available
-    $msg_class = ($message_author_id == $current_client_id) ? 'mine' : 'theirs';
-    echo '<p class="msg ' . $msg_class . '"><strong>'.esc_html($who).':</strong> '.esc_html($m->post_content).'</p>';
-  }
-  echo '</div>';
+                    ?>
+                            <div class="chat-message <?php echo $is_client_message ? 'mine' : 'theirs'; ?>">
+                                <img src="<?php echo esc_url($avatar_url); ?>" alt="<?php echo esc_attr($sender_name); ?> avatar" class="avatar">
+                                <div class="message-content">
+                                    <div class="message-bubble">
+                                        <span class="sender-name"><?php echo $sender_name; ?></span>
+                                        <p><?php echo nl2br(esc_html($m->post_content)); ?></p>
+                                    </div>
+                                    <span class="timestamp"><?php echo $message_time; ?></span>
+                                </div>
+                            </div>
+                        <?php
+                        }
+                    } else {
+                        echo '<p class="no-messages-yet">No messages in this chat yet. Start the conversation!</p>';
+                    }
+                    ?>
+                </div>
+            </div>
 
-  // 2c) render the send form, including hidden project_id
-  ?>
-  <form id="sendMessage" method="post">
-  <?php wp_nonce_field( 'send_message_form', 'send_message_nonce' ); ?>
-    <input type="hidden" name="project_id" value="<?php echo esc_attr($current_project); ?>">
-    <textarea name="msg" required placeholder="Type your message…"></textarea><br>
-    <button type="submit" name="send_message" value="1">Send</button>
-  </form>
-  <?php
-}
-?>
+            <form id="sendMessageForm" class="send-message-form" method="post">
+                <?php wp_nonce_field('send_message_form', 'send_message_nonce'); ?>
+                <input type="hidden" name="project_id" value="<?php echo esc_attr($current_project_id); ?>">
+                <textarea name="msg" class="message-input" required placeholder="Type your message…"></textarea>
+                <button type="submit" name="send_message" value="1" class="send-button">
+                    <span class="button-text">Send</span>
+                    <span class="button-icon">&#10148;</span>
+                </button>
+            </form>
+            <script>
+                // Auto-scroll to the bottom of the chat window
+                document.addEventListener('DOMContentLoaded', function() {
+                    const chatWindow = document.getElementById('chat-window');
+                    if (chatWindow) {
+                        chatWindow.scrollTop = chatWindow.scrollHeight;
+                    }
+                });
+            </script>
+        <?php
+            } // end permission check
+        endif; // end $current_project_id check
+        ?>
+    </div>
 
 
 
