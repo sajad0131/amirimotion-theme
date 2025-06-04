@@ -14,8 +14,8 @@ $wp_query->set('page_id', pocscd_dashboard_page_id());
 
 // if POCS says “lock it”, show its lock screen and STOP
 if (pocscd_lock_page()) {
-  do_action('pocscd_display_lock_page');
-  return;
+  wp_safe_redirect( wp_login_url( get_permalink() ) ); // Redirect to login, then back to dashboard
+    exit; // Important to prevent further code execution
 }
 
 // otherwise continue to render your dashboard…
