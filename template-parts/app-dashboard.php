@@ -671,67 +671,70 @@ if (!empty($_FILES['file_upload']) && check_admin_referer('file_upload_action'))
 
     <?php elseif ($screen == 'payments') : ?>
 
-      <?php 
-        if (isset($_GET['payment'])) {
-    $invoice_id_returned = isset($_GET['invoice_id']) ? intval($_GET['invoice_id']) : 0;
-    if ($_GET['payment'] == 'success') {
-        // You might want to double-check with the IPN status before confirming success here,
-        // as the return URL can be reached before IPN is processed.
-        // For now, a general message:
-        echo '<p style="color:green;">Thank you for your payment! Your payment is being processed. You will receive a confirmation once it is fully verified.</p>';
-    } elseif ($_GET['payment'] == 'cancelled') {
-        echo '<p style="color:orange;">Your PayPal payment was cancelled. Invoice #' . esc_html($invoice_id_returned) . ' is still unpaid.</p>';
-    }
-}
-        ?>
-      <h2><?php _e('Invoices & Payments', 'sina-amiri'); ?></h2>
+     <h2>Payments</h2>
     <?php
+    // Display success/cancel messages from PayPal redirect
+    if (isset($_GET['payment'])) {
+        $invoice_id_returned = isset($_GET['invoice_id']) ? intval($_GET['invoice_id']) : 0;
+        if ($_GET['payment'] == 'success') {
+            echo '<p style="color:green;">Thank you for your payment! Your payment is being processed. You will receive a confirmation once it is fully verified and the invoice status is updated.</p>';
+        } elseif ($_GET['payment'] == 'cancelled') {
+            echo '<p style="color:orange;">Your PayPal payment was cancelled. Invoice #' . esc_html($invoice_id_returned) . ' is still unpaid.</p>';
+        }
+    }
+
     $invoices = get_posts([
-      'post_type' => 'invoice',
+      'post_type' => 'invoice', // Your invoice CPT slug
       'author'    => $current_user->ID,
       'orderby'   => 'date',
       'order'     => 'DESC',
-      'posts_per_page' => -1,
+      'posts_per_page' => -1, // Get all invoices for the user
     ]);
 
-    if( $invoices ) {
+    if ( $invoices ) {
       echo '<ul>';
       foreach($invoices as $inv){
-        $invoice_id = $inv->ID;
-        $amt  = get_post_meta($invoice_id, '_amount', true);
-        $paid = get_post_meta($invoice_id,'paid',true);
-        $invoice_title = get_the_title($invoice_id); // Get the invoice title
-        $invoice_id_display = $invoice_id; // Or any custom invoice ID/number you use
+        $invoice_wp_id = $inv->ID; // WordPress Post ID of the invoice
+        $invoice_display_id = $inv->ID; // Or a custom invoice number if you have one
+        $invoice_title = get_the_title($invoice_wp_id);
+        $invoice_amount  = (float) get_post_meta($invoice_wp_id, '_amount', true); // Your meta key for invoice amount
+        $is_paid = (int) get_post_meta($invoice_wp_id, 'paid', true); // Your meta key for paid status (1 for paid)
 
-        echo '<li>Invoice #' . esc_html($invoice_id_display)
-           . ' – $' . number_format(floatval($amt),2) // Ensure $amt is a float
-           . ' – '. ($paid ? 'Paid' : 'Unpaid');
+        echo '<li>Invoice #' . esc_html($invoice_display_id)
+           . ' – $' . number_format($invoice_amount, 2)
+           . ' – '. ($is_paid ? 'Paid' : 'Unpaid');
 
-        if( ! $paid ) :
+        if ( ! $is_paid ) :
           // PayPal Configuration
-          $paypal_email = 'pp.merch01-facilitator@example.com'; // **REPLACE THIS**
-          //$paypal_url = 'https://www.paypal.com/cgi-bin/webscr'; // Live PayPal URL
-          $paypal_url = 'https://www.sandbox.paypal.com/cgi-bin/webscr'; // Sandbox URL for testing
+          $paypal_business_email = 'pp.merch01-facilitator@example.com'; // **REPLACE WITH YOUR ACTUAL PAYPAL EMAIL**
+          
+          // Determine if using Sandbox or Live PayPal URL
+          $use_paypal_sandbox = true; // SET TO false FOR LIVE
+          $paypal_action_url = $use_paypal_sandbox ? 'https://www.sandbox.paypal.com/cgi-bin/webscr' : 'https://www.paypal.com/cgi-bin/webscr';
 
-          $return_url = add_query_arg(['screen' => 'payments', 'payment' => 'success', 'invoice_id' => $inv->ID], get_permalink());
-          $cancel_url = add_query_arg(['screen' => 'payments', 'payment' => 'cancelled', 'invoice_id' => $inv->ID], get_permalink());
-          $notify_url = home_url('/?paypal_ipn=1'); // URL for PayPal IPN listener
+          $return_url = add_query_arg(['screen' => 'payments', 'payment' => 'success', 'invoice_id' => $invoice_wp_id], get_permalink());
+          $cancel_url = add_query_arg(['screen' => 'payments', 'payment' => 'cancelled', 'invoice_id' => $invoice_wp_id], get_permalink());
+          $notify_url = home_url('/?paypal_ipn_handler=1'); // IPN Listener URL (matches functions.php)
+          
+          // Data to be passed in the 'custom' field
+          $custom_field_data = json_encode([
+              'invoice_wp_id' => $invoice_wp_id, 
+              'user_id' => $current_user->ID
+          ]);
           ?>
-          <form action="<?php echo esc_url($paypal_url); ?>" method="post" style="display:inline">
-            <input type="hidden" name="business" value="<?php echo esc_attr($paypal_email); ?>">
-            
+          <form action="<?php echo esc_url($paypal_action_url); ?>" method="post" style="display:inline; margin-left: 10px;">
+            <input type="hidden" name="business" value="<?php echo esc_attr($paypal_business_email); ?>">
             <input type="hidden" name="cmd" value="_xclick">
             
-            <input type="hidden" name="item_name" value="<?php echo esc_attr('Payment for Invoice #' . $invoice_id_display . ': ' . $invoice_title); ?>">
-            <input type="hidden" name="item_number" value="<?php echo esc_attr($inv->ID); ?>"> <input type="hidden" name="amount" value="<?php echo esc_attr(number_format(floatval($amt), 2, '.', '')); ?>">
+            <input type="hidden" name="item_name" value="<?php echo esc_attr('Payment for Invoice #' . $invoice_display_id . ': ' . $invoice_title); ?>">
+            <input type="hidden" name="item_number" value="<?php echo esc_attr($invoice_wp_id); ?>"> <input type="hidden" name="amount" value="<?php echo esc_attr(number_format($invoice_amount, 2, '.', '')); ?>">
             <input type="hidden" name="currency_code" value="USD"> <input type="hidden" name="return" value="<?php echo esc_url($return_url); ?>">
             <input type="hidden" name="cancel_return" value="<?php echo esc_url($cancel_url); ?>">
             <input type="hidden" name="notify_url" value="<?php echo esc_url($notify_url); ?>">
             
-            <?php $custom_value = json_encode(['invoice_id' => $inv->ID, 'user_id' => $current_user->ID]); ?>
-            <input type="hidden" name="custom" value="<?php echo esc_attr($custom_value); ?>">
-
-            <button type="submit" name="pay_now_paypal">Pay with PayPal</button>,
+            <input type="hidden" name="custom" value="<?php echo esc_attr($custom_field_data); ?>">
+            
+            <input type="hidden" name="no_shipping" value="1"> <input type="hidden" name="rm" value="2"> <button type="submit" name="pay_with_paypal">Pay with PayPal</button>
           </form>
           <?php
         endif;

@@ -2150,157 +2150,212 @@ add_filter( 'login_redirect', 'amiri_custom_login_redirect', 10, 3 );
 
 
 
-// In functions.php
-// add_action('init', 'amiri_paypal_ipn_listener'); // Make sure this is active
 
-function amiri_paypal_ipn_listener() {
-    if (isset($_GET['paypal_ipn']) && $_GET['paypal_ipn'] == '1') {
+
+
+
+
+
+
+
+// Hook the IPN listener to init
+add_action('init', 'amiri_paypal_ipn_listener_handler');
+
+function amiri_paypal_ipn_listener_handler() {
+    // Check if this is an IPN request
+    if (isset($_GET['paypal_ipn_handler']) && $_GET['paypal_ipn_handler'] == '1') {
         
-        error_log("PayPal IPN: Received a request."); // Log start
+        error_log("PayPal IPN (Amiri Theme): Listener accessed.");
 
+        // Read raw POST data from PayPal
         $raw_post_data = file_get_contents('php://input');
         if (empty($raw_post_data)) {
-            error_log("PayPal IPN: Empty POST data received.");
-            status_header(200); // Still send 200 OK to prevent PayPal retries for empty requests
+            error_log("PayPal IPN (Amiri Theme): Received empty POST data.");
+            status_header(200); // Acknowledge, but nothing to process
             exit();
         }
-        error_log("PayPal IPN: Raw POST data: " . $raw_post_data);
+        error_log("PayPal IPN (Amiri Theme): Raw POST data received: " . $raw_post_data);
 
-        $raw_post_array = explode('&', $raw_post_data);
-        $myPost = array();
-        foreach ($raw_post_array as $keyval) {
-            $keyval = explode('=', $keyval);
-            if (count($keyval) == 2) {
-                $myPost[$keyval[0]] = urldecode($keyval[1]);
-            }
-        }
+        // Parse the IPN data
+        $ipn_data = array();
+        parse_str($raw_post_data, $ipn_data); // Decodes URL-encoded string
 
-        $req = 'cmd=_notify-validate';
-        foreach ($myPost as $key => $value) {
-            $value = urlencode($value); // Re-encode for validation request
-            $req .= "&$key=$value";
-        }
-        error_log("PayPal IPN: Validation request string: " . $req);
+        // Prepare data for validation by prepending 'cmd=_notify-validate'
+        $validation_data = array('cmd' => '_notify-validate') + $ipn_data;
+        
+        // Determine PayPal URL (Sandbox or Live)
+        $use_paypal_sandbox_for_validation = true; // SET TO false FOR LIVE - should match form setting
+        $paypal_validation_url = $use_paypal_sandbox_for_validation ? 'https://www.sandbox.paypal.com/cgi-bin/webscr' : 'https://www.paypal.com/cgi-bin/webscr';
 
-        //$paypal_url = 'https://www.paypal.com/cgi-bin/webscr'; // Live
-        $paypal_url = 'https://www.sandbox.paypal.com/cgi-bin/webscr'; // Sandbox
-        error_log("PayPal IPN: Using PayPal URL: " . $paypal_url);
+        error_log("PayPal IPN (Amiri Theme): Validating against: " . $paypal_validation_url);
+        error_log("PayPal IPN (Amiri Theme): Validation data string: " . http_build_query($validation_data));
 
-
-        $ch = curl_init($paypal_url);
+        // Send data back to PayPal for validation
+        $ch = curl_init($paypal_validation_url);
         curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $req);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1); 
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($validation_data));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1); // Enable SSL verification
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-        // For local testing, you might need to provide a path to a CA bundle
-        // curl_setopt($ch, CURLOPT_CAINFO, dirname(__FILE__) . '/cacert.pem'); // Example
+        // If SSL verification fails, you might need to specify a CA bundle path:
+        // curl_setopt($ch, CURLOPT_CAINFO, get_template_directory() . '/path/to/cacert.pem');
         curl_setopt($ch, CURLOPT_FORBID_REUSE, 1);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30); // Set connection timeout
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Connection: Close', 'User-Agent: AmiriMotion-IPN-Handler'));
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30); // Timeout in seconds
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Connection: Close', 'User-Agent: AmiriTheme-WordPress-IPN'));
+        
+        $validation_response = curl_exec($ch);
 
-
-        $res = curl_exec($ch);
         if (curl_errno($ch)) {
-            error_log("PayPal IPN: cURL error: " . curl_error($ch));
+            error_log("PayPal IPN (Amiri Theme): cURL Error during validation: " . curl_error($ch));
             curl_close($ch);
+            // Do not send 200 OK if cURL fails, PayPal might retry
             status_header(500); // Internal server error
             exit();
         }
         curl_close($ch);
-        error_log("PayPal IPN: Validation response: " . $res);
+        error_log("PayPal IPN (Amiri Theme): PayPal validation response: " . $validation_response);
 
+        // Check PayPal's validation response
+        if (strcmp(trim($validation_response), "VERIFIED") == 0) {
+            error_log("PayPal IPN (Amiri Theme): IPN VERIFIED by PayPal.");
 
-        if (strcmp(trim($res), "VERIFIED") == 0) {
-            error_log("PayPal IPN: VERIFIED");
-
-            // --- Process IPN Data ---
-            $payment_status = isset($myPost['payment_status']) ? sanitize_text_field($myPost['payment_status']) : '';
-            $custom_data_raw = isset($myPost['custom']) ? stripslashes($myPost['custom']) : '';
-            $custom_data = json_decode($custom_data_raw, true);
-            $invoice_id = isset($custom_data['invoice_id']) ? intval($custom_data['invoice_id']) : 0;
+            // Sanitize and extract IPN variables
+            $payment_status   = isset($ipn_data['payment_status']) ? sanitize_text_field($ipn_data['payment_status']) : '';
+            $receiver_email   = isset($ipn_data['receiver_email']) ? sanitize_email($ipn_data['receiver_email']) : '';
+            $payer_email      = isset($ipn_data['payer_email']) ? sanitize_email($ipn_data['payer_email']) : '';
+            $item_number      = isset($ipn_data['item_number']) ? sanitize_text_field($ipn_data['item_number']) : ''; // This should be our invoice_wp_id
+            $mc_gross         = isset($ipn_data['mc_gross']) ? (float)$ipn_data['mc_gross'] : 0.0;
+            $mc_currency      = isset($ipn_data['mc_currency']) ? sanitize_text_field($ipn_data['mc_currency']) : '';
+            $txn_id           = isset($ipn_data['txn_id']) ? sanitize_text_field($ipn_data['txn_id']) : '';
+            $txn_type         = isset($ipn_data['txn_type']) ? sanitize_text_field($ipn_data['txn_type']) : '';
+            $payment_date_str = isset($ipn_data['payment_date']) ? sanitize_text_field($ipn_data['payment_date']) : '';
             
-            $transaction_id = isset($myPost['txn_id']) ? sanitize_text_field($myPost['txn_id']) : '';
-            $payer_email = isset($myPost['payer_email']) ? sanitize_email($myPost['payer_email']) : '';
-            $receiver_email = isset($myPost['receiver_email']) ? sanitize_email($myPost['receiver_email']) : ''; // Your PayPal email
-            $payment_amount = isset($myPost['mc_gross']) ? sanitize_text_field($myPost['mc_gross']) : 0;
-            $payment_currency = isset($myPost['mc_currency']) ? sanitize_text_field($myPost['mc_currency']) : '';
-            $payment_date = isset($myPost['payment_date']) ? sanitize_text_field($myPost['payment_date']) : ''; // Example: 20:12:59 Jan 13, 2009 PST
-            $txn_type = isset($myPost['txn_type']) ? sanitize_text_field($myPost['txn_type']) : ''; // e.g., web_accept, subscr_payment
-            $item_name = isset($myPost['item_name']) ? sanitize_text_field($myPost['item_name']) : '';
-            $item_number = isset($myPost['item_number']) ? sanitize_text_field($myPost['item_number']) : ''; // Should match invoice_id
+            $custom_field_raw = isset($ipn_data['custom']) ? stripslashes($ipn_data['custom']) : '';
+            $custom_field_data = json_decode($custom_field_raw, true);
+            $invoice_wp_id_from_custom = isset($custom_field_data['invoice_wp_id']) ? intval($custom_field_data['invoice_wp_id']) : 0;
+            // $user_id_from_custom = isset($custom_field_data['user_id']) ? intval($custom_field_data['user_id']) : 0;
 
+            error_log("PayPal IPN (Amiri Theme) VERIFIED Data: Status='{$payment_status}', InvoiceID(custom)='{$invoice_wp_id_from_custom}', ItemNumber='{$item_number}', PayerEmail='{$payer_email}', Amount='{$mc_gross} {$mc_currency}', TXN_ID='{$txn_id}', ReceiverEmail='{$receiver_email}'");
 
-            // Log extracted variables
-            error_log("PayPal IPN Data: Status: {$payment_status}, Invoice ID (custom): {$invoice_id}, Item Number: {$item_number}, Payer Email: {$payer_email}, Amount: {$payment_amount} {$payment_currency}, TXN ID: {$transaction_id}");
+            // --- Perform Critical Business Logic Checks ---
 
-
-            // **Crucial Checks:**
-            // 1. Check receiver_email is your primary PayPal email.
-            // $expected_paypal_email = 'your-paypal-business-email@example.com'; // **REPLACE THIS**
-            // if (strtolower($receiver_email) != strtolower($expected_paypal_email)) {
-            //    error_log("PayPal IPN: Receiver email mismatch. Expected: {$expected_paypal_email}, Got: {$receiver_email}");
-            //    status_header(200); exit(); // Exit but log as an issue
-            // }
-
-            // 2. Check if invoice_id is valid and corresponds to an actual invoice
-            if ($invoice_id > 0 && $item_number == $invoice_id) { // Also verify item_number if possible
-                $invoice_post = get_post($invoice_id);
-                if ($invoice_post && $invoice_post->post_type == 'invoice') {
-                    
-                    $original_amount = get_post_meta($invoice_id, 'amount', true);
-                    // Optional: Check currency too if you store it.
-                    // if ($payment_amount < $original_amount) {
-                    //    error_log("PayPal IPN: Payment amount mismatch for invoice {$invoice_id}. Expected: {$original_amount}, Got: {$payment_amount}");
-                    //    status_header(200); exit(); // Exit but log
-                    // }
-
-
-                    // 3. Check if this transaction_id has been processed before to prevent duplicates.
-                    $processed_txn_id = get_post_meta($invoice_id, 'paypal_transaction_id', true);
-                    if ($processed_txn_id == $transaction_id) {
-                        error_log("PayPal IPN: Duplicate transaction ID {$transaction_id} for invoice {$invoice_id}. Already processed.");
-                        status_header(200); exit();
-                    }
-
-                    if ($payment_status == 'Completed') {
-                        error_log("PayPal IPN: Payment COMPLETED for invoice {$invoice_id}.");
-                        update_post_meta($invoice_id, 'paid', 1);
-                        update_post_meta($invoice_id, 'paypal_transaction_id', $transaction_id);
-                        update_post_meta($invoice_id, 'paypal_payer_email', $payer_email);
-                        update_post_meta($invoice_id, 'paypal_payment_gross', $payment_amount);
-                        update_post_meta($invoice_id, 'paypal_payment_currency', $payment_currency);
-                        update_post_meta($invoice_id, 'paypal_payment_date', $payment_date);
-                        update_post_meta($invoice_id, 'paypal_txn_type', $txn_type);
-                        update_post_meta($invoice_id, 'paypal_payment_status', $payment_status); // Store the final status
-                        
-                        // Store all IPN data for reference if needed (can be a lot of data)
-                        // update_post_meta($invoice_id, 'paypal_full_ipn_data', $myPost);
-
-                        // Actions like sending email
-                        // wp_mail(get_option('admin_email'), 'Payment Received for Invoice #'.$invoice_id, 'Details: ...');
-
-                    } else {
-                        // Handle other statuses (Pending, Failed, Refunded, etc.)
-                        update_post_meta($invoice_id, 'paypal_payment_status', $payment_status);
-                        update_post_meta($invoice_id, 'paypal_transaction_id', $transaction_id); // Store txn_id even for non-completed
-                        error_log("PayPal IPN: Payment status for invoice {$invoice_id} is {$payment_status}. TXN ID: {$transaction_id}");
-                    }
-                } else {
-                     error_log("PayPal IPN: Invalid invoice ID or post type for ID {$invoice_id}.");
-                }
-            } else {
-                error_log("PayPal IPN: Invoice ID not found or mismatch in custom data. Custom: {$custom_data_raw}, Item Number: {$item_number}");
+            // 1. Check receiver_email matches your PayPal business email
+            $expected_paypal_merchant_email = 'pp.merch01-facilitator@example.com'; // **REPLACE WITH YOUR ACTUAL PAYPAL EMAIL**
+            if (strcasecmp($receiver_email, $expected_paypal_merchant_email) != 0) {
+                error_log("PayPal IPN (Amiri Theme) Error: Receiver email mismatch. Expected: {$expected_paypal_merchant_email}, Received: {$receiver_email}. TXN_ID: {$txn_id}");
+                status_header(200); exit(); // Acknowledge IPN but log error
             }
 
-        } else if (strcmp(trim($res), "INVALID") == 0) {
-            error_log("PayPal IPN: INVALID. Raw POST: " . $raw_post_data);
+            // 2. Validate invoice ID (from custom field and item_number)
+            if ($invoice_wp_id_from_custom <= 0 || $item_number != $invoice_wp_id_from_custom) {
+                error_log("PayPal IPN (Amiri Theme) Error: Invoice ID mismatch or invalid. From Custom: {$invoice_wp_id_from_custom}, From ItemNumber: {$item_number}. TXN_ID: {$txn_id}");
+                status_header(200); exit();
+            }
+            $invoice_id_to_process = $invoice_wp_id_from_custom;
+
+            $invoice_post = get_post($invoice_id_to_process);
+            if (!$invoice_post || $invoice_post->post_type != 'invoice') { // Ensure 'invoice' is your CPT slug
+                error_log("PayPal IPN (Amiri Theme) Error: Could not retrieve valid invoice post for ID {$invoice_id_to_process}. TXN_ID: {$txn_id}");
+                status_header(200); exit();
+            }
+
+            // 3. Check if transaction ID has already been processed
+            $existing_paypal_txn_id = get_post_meta($invoice_id_to_process, '_paypal_transaction_id', true);
+            if ($existing_paypal_txn_id == $txn_id && $payment_status == 'Completed') {
+                error_log("PayPal IPN (Amiri Theme): Duplicate COMPLETED transaction ID {$txn_id} for invoice {$invoice_id_to_process}. Already processed.");
+                status_header(200); exit();
+            }
+
+            // 4. Process based on payment_status
+            if ($payment_status == 'Completed') {
+                // 5. Verify payment amount and currency
+                $expected_invoice_amount = (float)get_post_meta($invoice_id_to_process, 'amount', true);
+                $expected_invoice_currency = 'USD'; // Or fetch from invoice meta if stored
+
+                if (abs($mc_gross - $expected_invoice_amount) > 0.01 || strcasecmp($mc_currency, $expected_invoice_currency) != 0) {
+                    error_log("PayPal IPN (Amiri Theme) Warning: Payment amount/currency mismatch for invoice {$invoice_id_to_process}. Expected: {$expected_invoice_amount} {$expected_invoice_currency}, Received: {$mc_gross} {$mc_currency}. TXN ID: {$txn_id}.");
+                    // Optionally, handle this case, e.g., by not marking as fully paid or adding a note
+                    update_post_meta($invoice_id_to_process, '_paypal_payment_issue', "Amount/currency mismatch. Expected: {$expected_invoice_amount} {$expected_invoice_currency}, Received: {$mc_gross} {$mc_currency}");
+                }
+
+                // All checks passed for a completed payment
+                error_log("PayPal IPN (Amiri Theme): Payment COMPLETED for invoice {$invoice_id_to_process}. Updating meta. TXN_ID: {$txn_id}");
+                update_post_meta($invoice_id_to_process, 'paid', 1); // Mark invoice as paid
+                update_post_meta($invoice_id_to_process, '_paypal_transaction_id', $txn_id);
+                update_post_meta($invoice_id_to_process, '_paypal_payer_email', $payer_email);
+                update_post_meta($invoice_id_to_process, '_paypal_payment_gross', $mc_gross);
+                update_post_meta($invoice_id_to_process, '_paypal_payment_currency', $mc_currency);
+                update_post_meta($invoice_id_to_process, '_paypal_payment_date', $payment_date_str);
+                update_post_meta($invoice_id_to_process, '_paypal_txn_type', $txn_type);
+                update_post_meta($invoice_id_to_process, '_paypal_payment_status', 'Completed'); // Final status
+
+                // Optional: Send email confirmation to admin/user
+                // wp_mail(get_option('admin_email'), "Payment Confirmation for Invoice #{$invoice_id_to_process}", "...");
+
+            } else {
+                // Handle other payment statuses (Pending, Failed, Refunded, Denied etc.)
+                error_log("PayPal IPN (Amiri Theme): Payment status for invoice {$invoice_id_to_process} is '{$payment_status}'. TXN_ID: {$txn_id}");
+                update_post_meta($invoice_id_to_process, '_paypal_payment_status', $payment_status);
+                if (!empty($txn_id)) { // Store TXN ID even for non-completed, if available
+                    update_post_meta($invoice_id_to_process, '_paypal_transaction_id', $txn_id);
+                }
+            }
+
+        } else if (strcmp(trim($validation_response), "INVALID") == 0) {
+            error_log("PayPal IPN (Amiri Theme) Error: IPN INVALID by PayPal. Raw POST: " . $raw_post_data);
         } else {
-            error_log("PayPal IPN: Unexpected validation response: " . $res);
+            error_log("PayPal IPN (Amiri Theme) Error: Unexpected validation response from PayPal: '" . $validation_response . "'");
         }
         
-        status_header(200);
+        status_header(200); // Always send 200 OK to PayPal to acknowledge IPN receipt
         exit();
     }
+}
+
+// Meta box to display PayPal details on Invoice Edit screen
+add_action('add_meta_boxes_invoice', 'amiri_invoice_paypal_details_metabox_setup'); // Hook to your invoice CPT slug
+
+function amiri_invoice_paypal_details_metabox_setup() {
+    add_meta_box(
+        'amiri_paypal_transaction_details_mb', // Unique ID
+        'PayPal Transaction Details',      // Box title
+        'amiri_render_paypal_details_metabox_content', // Callback function
+        'invoice',                         // Your invoice CPT slug
+        'normal',                          // Context (normal, side, advanced)
+        'high'                             // Priority
+    );
+}
+
+function amiri_render_paypal_details_metabox_content($post) {
+    // Nonce for security (not strictly needed for display, but good practice if you add actions)
+    // wp_nonce_field(basename(__FILE__), 'amiri_paypal_details_nonce');
+
+    $is_paid = get_post_meta($post->ID, 'paid', true);
+    echo '<p><strong>Invoice Paid Status:</strong> ' . ($is_paid ? 'Yes' : 'No') . '</p>';
+
+    $txn_id     = get_post_meta($post->ID, '_paypal_transaction_id', true);
+    $status     = get_post_meta($post->ID, '_paypal_payment_status', true);
+    $payer_email= get_post_meta($post->ID, '_paypal_payer_email', true);
+    $gross      = get_post_meta($post->ID, '_paypal_payment_gross', true);
+    $currency   = get_post_meta($post->ID, '_paypal_payment_currency', true);
+    $date       = get_post_meta($post->ID, '_paypal_payment_date', true);
+    $txn_type   = get_post_meta($post->ID, '_paypal_txn_type', true);
+    $issue      = get_post_meta($post->ID, '_paypal_payment_issue', true);
+
+    if (empty($status) && empty($txn_id)) {
+        echo '<p>No PayPal transaction details recorded for this invoice yet.</p>';
+        return;
+    }
+
+    echo '<h4>Transaction Details:</h4>';
+    echo '<ul>';
+    if ($status) echo '<li><strong>PayPal Status:</strong> ' . esc_html($status) . '</li>';
+    if ($txn_id) echo '<li><strong>Transaction ID:</strong> ' . esc_html($txn_id) . '</li>';
+    if ($payer_email) echo '<li><strong>Payer Email:</strong> ' . esc_html($payer_email) . '</li>';
+    if ($gross) echo '<li><strong>Amount Paid (PayPal):</strong> ' . esc_html($gross) . ' ' . esc_html($currency) . '</li>';
+    if ($date) echo '<li><strong>PayPal Payment Date:</strong> ' . esc_html($date) . '</li>';
+    if ($txn_type) echo '<li><strong>Transaction Type:</strong> ' . esc_html($txn_type) . '</li>';
+    if ($issue) echo '<li style="color:red;"><strong>Payment Issue Note:</strong> ' . esc_html($issue) . '</li>';
+    echo '</ul>';
 }
